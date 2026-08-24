@@ -24,7 +24,15 @@ jobs:
       # create its own mount/user namespaces. Mounting the host's cgroup
       # tree in read-write is also required for nspawn to manage the
       # container's cgroup.
-      options: --privileged
+      #
+      # --tmpfs /run and /run/lock: nspawn keeps its own runtime state
+      # (propagation directories, etc.) under /run and refuses to operate
+      # if that turns out to be backed by a real disk filesystem instead
+      # of tmpfs -- which is exactly what /run is by default inside a
+      # plain Docker container. Without this, builds fail with
+      # "Attempted to remove disk file system under
+      # /run/systemd/nspawn/propagate/...".
+      options: --privileged --tmpfs /run --tmpfs /run/lock
       volumes:
         - /sys/fs/cgroup:/sys/fs/cgroup:rw
 
@@ -40,6 +48,12 @@ jobs:
         run: |
           pacman -Syu --noconfirm
           pacman -S --needed --noconfirm devtools sudo
+
+      - name: Generate machine-id for systemd-nspawn
+        # Docker images ship without /etc/machine-id by design (it's meant
+        # to be generated at first real boot). systemd-nspawn requires one
+        # to exist to run at all, so create it explicitly here.
+        run: systemd-machine-id-setup
 
       - name: Resolve upstream commit hashes
         id: srcrefs
