@@ -19,60 +19,23 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel
-      # --privileged: systemd-nspawn (used internally by pkgctl build to
-      # build inside the clean chroot) needs CAP_SYS_ADMIN and friends to
-      # create its own mount/user namespaces. Mounting the host's cgroup
-      # tree in read-write is also required for nspawn to manage the
-      # container's cgroup.
-      #
-      # --tmpfs /run and /run/lock: nspawn keeps its own runtime state
-      # (propagation directories, etc.) under /run and refuses to operate
-      # if that turns out to be backed by a real disk filesystem instead
-      # of tmpfs -- which is exactly what /run is by default inside a
-      # plain Docker container. Without this, builds fail with
-      # "Attempted to remove disk file system under
-      # /run/systemd/nspawn/propagate/...".
-      options: --privileged --tmpfs /run --tmpfs /run/lock
-      volumes:
-        - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      options: --privileged
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install devtools
-        # pkgctl (from devtools) resolves and installs this package's
-        # depends/makedepends INSIDE the chroot itself, straight from the
-        # PKGBUILD -- so nothing package-specific (qt6-*, cmake, curl, ...)
-        # needs to be installed on the host at all.
+      - name: Update system and install build tooling
         run: |
           pacman -Syu --noconfirm
-          pacman -S --needed --noconfirm devtools sudo dbus
-
-      - name: Generate machine-id for systemd-nspawn
-        # Docker images ship without /etc/machine-id by design (it's meant
-        # to be generated at first real boot). systemd-nspawn requires one
-        # to exist to run at all, so create it explicitly here.
-        run: systemd-machine-id-setup
-
-      - name: Start D-Bus system bus
-        # systemd-nspawn tries to register each container it launches with
-        # systemd-machined over the D-Bus system bus. Plain Docker
-        # containers don't run a bus daemon at all, so that registration
-        # fails with "Failed to open system bus: No such file or
-        # directory". Starting one here provides the socket nspawn expects.
-        run: |
-          mkdir -p /run/dbus
-          dbus-daemon --system --fork
-          # Fail fast here rather than deep inside a chroot build if this
-          # didn't come up cleanly.
-          test -S /run/dbus/system_bus_socket
-
+          pacman -S --needed --noconfirm \
+            git cmake patchelf sudo \
+            qt6-base qt6-svg qt6-declarative qt6-imageformats qt6-5compat \
+            curl glib2
       - name: Resolve upstream commit hashes
         id: srcrefs
         run: |
           set -e
-
           # Query the latest commit on each upstream repo WITHOUT cloning.
           # These four hashes together uniquely identify "the source state"
           # this build would produce, so they drive the cache key below.
@@ -81,12 +44,10 @@ jobs:
           get_sha() {
             git ls-remote "$1" "$2" | head -n1 | cut -f1
           }
-
           atools_sha=$(get_sha https://github.com/albar965/atools.git HEAD)
           marble_sha=$(get_sha https://github.com/albar965/marble.git refs/heads/lnm/1.2)
           littlenavconnect_sha=$(get_sha https://github.com/albar965/littlenavconnect.git HEAD)
           littlenavmap_sha=$(get_sha https://github.com/albar965/littlenavmap.git HEAD)
-
           # Sanity check: each value must be exactly one 40-char hex SHA.
           for pair in "atools:$atools_sha" "marble:$marble_sha" \
                       "littlenavconnect:$littlenavconnect_sha" \
@@ -98,13 +59,11 @@ jobs:
               exit 1
             fi
           done
-
           echo "atools=$atools_sha" >> "$GITHUB_OUTPUT"
           echo "marble=$marble_sha" >> "$GITHUB_OUTPUT"
           echo "littlenavconnect=$littlenavconnect_sha" >> "$GITHUB_OUTPUT"
           echo "littlenavmap=$littlenavmap_sha" >> "$GITHUB_OUTPUT"
           echo "combined=${atools_sha}-${marble_sha}-${littlenavconnect_sha}-${littlenavmap_sha}" >> "$GITHUB_OUTPUT"
-
       - name: Restore source/build cache
         id: cache
         uses: actions/cache@v4
@@ -121,45 +80,23 @@ jobs:
           # only has to recompile what actually changed.
           restore-keys: |
             littlenavmap-src-
-
       - name: Create unprivileged build user
         run: |
-          # pkgctl build (like makepkg/makechrootpkg) refuses to run as
-          # root, so we need a dedicated user with passwordless sudo --
-          # it shells out to sudo internally for the privileged parts
-          # (creating/updating the chroot, invoking systemd-nspawn, etc.).
+          # makepkg refuses to run as root, so create a dedicated user
           useradd -m builder
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
           chown -R builder:builder "$GITHUB_WORKSPACE"
-
-      - name: Build package in clean chroot (main + debug)
-        # pkgctl build creates/updates the base chroot under
-        # /var/lib/archbuild/ itself (first run only; later runs reuse and
-        # just update it) -- no manual mkarchroot step needed.
-        #
-        # --arch x86_64:  build explicitly for x86_64.
-        # -c/--clean:     recreate the chroot's working copy before
-        #                 building, so every run starts from a pristine
-        #                 state rather than whatever a previous run left
-        #                 behind.
-        #
-        # Note: we deliberately do NOT pass --repo. pkgctl auto-detects
-        # the target repo itself and falls back to 'extra' for packages
-        # that aren't in an official repo (which is our case here);
-        # passing --repo explicitly conflicts with that auto-detection
-        # and pkgctl refuses to run ("disallowed" error).
-        #
-        # Package depends/makedepends are installed inside the chroot
-        # automatically from the PKGBUILD -- nothing manual here. Because
-        # the system default makepkg.conf has `debug` in OPTIONS, this
-        # also produces a split littlenavmap-git-debug-*.pkg.tar.zst
+      - name: Build package with makepkg
+        # -s: install missing deps via pacman, -c: clean up after build
+        # --needed: skip already-installed deps, --noconfirm: no prompts
+        # Because the system default makepkg.conf has `debug` in OPTIONS,
+        # this also produces a split littlenavmap-git-debug-*.pkg.tar.zst
         # alongside the main package.
         run: |
           sudo -u builder bash -c "
             cd '$GITHUB_WORKSPACE' &&
-            pkgctl build --arch x86_64 -c
+            makepkg -s --needed --noconfirm
           "
-
       - name: Show resulting package files
         # Expect to see BOTH littlenavmap-git-*.pkg.tar.zst (main package)
         # and littlenavmap-git-debug-*.pkg.tar.zst (split debug symbols).
