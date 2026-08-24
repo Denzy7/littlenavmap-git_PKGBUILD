@@ -1,0 +1,96 @@
+name: Build littlenavmap-git (x86_64)
+
+on:
+  push:
+    paths:
+      - "PKGBUILD"
+      - "*.patch"
+      - "LittleNavmap.desktop"
+      - ".github/workflows/build.yml"
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Optional: rebuild weekly to track the -git upstream
+    - cron: "0 3 * * 0"
+
+jobs:
+  build:
+    name: Build on Arch Linux (x86_64)
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+      options: --privileged
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Update system and install build tooling
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --needed --noconfirm \
+            git cmake patchelf sudo \
+            qt6-base qt6-svg qt6-declarative qt6-imageformats qt6-5compat \
+            curl glib2
+
+      - name: Resolve upstream commit hashes
+        id: srcrefs
+        run: |
+          # Query the latest commit on each upstream repo WITHOUT cloning.
+          # These four hashes together uniquely identify "the source state"
+          # this build would produce, so they drive the cache key below.
+          atools_sha=$(git ls-remote https://github.com/albar965/atools.git HEAD | cut -f1)
+          marble_sha=$(git ls-remote https://github.com/albar965/marble.git refs/heads/lnm/1.2 | cut -f1)
+          littlenavconnect_sha=$(git ls-remote https://github.com/albar965/littlenavconnect.git HEAD | cut -f1)
+          littlenavmap_sha=$(git ls-remote https://github.com/albar965/littlenavmap.git HEAD | cut -f1)
+
+          echo "atools=$atools_sha" >> "$GITHUB_OUTPUT"
+          echo "marble=$marble_sha" >> "$GITHUB_OUTPUT"
+          echo "littlenavconnect=$littlenavconnect_sha" >> "$GITHUB_OUTPUT"
+          echo "littlenavmap=$littlenavmap_sha" >> "$GITHUB_OUTPUT"
+          echo "combined=${atools_sha}-${marble_sha}-${littlenavconnect_sha}-${littlenavmap_sha}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore source/build cache
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            src
+            pkg
+          # Exact hit only when NOTHING upstream has changed since the cache
+          # was written -> safe to reuse untouched.
+          key: littlenavmap-src-${{ steps.srcrefs.outputs.combined }}
+          # Fallback: an older cache (some repos changed). We still restore
+          # it so `git pull` inside prepare() only has to fetch the delta
+          # for the repos that moved, instead of a full re-clone, and `make`
+          # only has to recompile what actually changed.
+          restore-keys: |
+            littlenavmap-src-
+
+      - name: Create unprivileged build user
+        run: |
+          # makepkg refuses to run as root, so create a dedicated user
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+
+      - name: Build package with makepkg
+        # -s: install missing deps via pacman, -c: clean up after build
+        # --needed: skip already-installed deps, --noconfirm: no prompts
+        run: |
+          sudo -u builder bash -c "
+            cd '$GITHUB_WORKSPACE' &&
+            makepkg -s --needed --noconfirm
+          "
+
+      - name: Show resulting package files
+        run: ls -lh *.pkg.tar.*
+
+      - name: Upload built package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: littlenavmap-git-x86_64
+          path: |
+            *.pkg.tar.zst
+            *.pkg.tar.xz
+          if-no-files-found: error
