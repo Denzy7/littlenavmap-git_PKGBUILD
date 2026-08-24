@@ -19,19 +19,27 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel
+      # --privileged: systemd-nspawn (used internally by pkgctl build to
+      # build inside the clean chroot) needs CAP_SYS_ADMIN and friends to
+      # create its own mount/user namespaces. Mounting the host's cgroup
+      # tree in read-write is also required for nspawn to manage the
+      # container's cgroup.
       options: --privileged
+      volumes:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Update system and install build tooling
+      - name: Install devtools
+        # pkgctl (from devtools) resolves and installs this package's
+        # depends/makedepends INSIDE the chroot itself, straight from the
+        # PKGBUILD -- so nothing package-specific (qt6-*, cmake, curl, ...)
+        # needs to be installed on the host at all.
         run: |
           pacman -Syu --noconfirm
-          pacman -S --needed --noconfirm \
-            git cmake patchelf sudo \
-            qt6-base qt6-svg qt6-declarative qt6-imageformats qt6-5compat \
-            curl glib2
+          pacman -S --needed --noconfirm devtools sudo
 
       - name: Resolve upstream commit hashes
         id: srcrefs
@@ -89,28 +97,60 @@ jobs:
 
       - name: Create unprivileged build user
         run: |
-          # makepkg refuses to run as root, so create a dedicated user
+          # pkgctl build (like makepkg/makechrootpkg) refuses to run as
+          # root, so we need a dedicated user with passwordless sudo --
+          # it shells out to sudo internally for the privileged parts
+          # (creating/updating the chroot, invoking systemd-nspawn, etc.).
           useradd -m builder
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
           chown -R builder:builder "$GITHUB_WORKSPACE"
 
-      - name: Build package with makepkg
-        # -s: install missing deps via pacman, -c: clean up after build
-        # --needed: skip already-installed deps, --noconfirm: no prompts
+      - name: Build package in clean chroot (main + debug)
+        # pkgctl build creates/updates the base chroot under
+        # /var/lib/archbuild/ itself (first run only; later runs reuse and
+        # just update it) -- no manual mkarchroot step needed.
+        #
+        # --repo extra:  this package isn't in an official repo, so tell
+        #                 pkgctl which chroot flavor to use rather than
+        #                 relying on auto-detection (which only works for
+        #                 packages already released in a repo).
+        # --arch x86_64:  build explicitly for x86_64.
+        # -c/--clean:     recreate the chroot's working copy before
+        #                 building, so every run starts from a pristine
+        #                 state rather than whatever a previous run left
+        #                 behind.
+        #
+        # Package depends/makedepends are installed inside the chroot
+        # automatically from the PKGBUILD -- nothing manual here. Because
+        # the system default makepkg.conf has `debug` in OPTIONS, this
+        # also produces a split littlenavmap-git-debug-*.pkg.tar.zst
+        # alongside the main package.
         run: |
           sudo -u builder bash -c "
             cd '$GITHUB_WORKSPACE' &&
-            makepkg -s --needed --noconfirm
+            pkgctl build --repo extra --arch x86_64 -c
           "
 
       - name: Show resulting package files
+        # Expect to see BOTH littlenavmap-git-*.pkg.tar.zst (main package)
+        # and littlenavmap-git-debug-*.pkg.tar.zst (split debug symbols).
         run: ls -lh *.pkg.tar.*
 
-      - name: Upload built package artifact
+      - name: Upload main package artifact
         uses: actions/upload-artifact@v4
         with:
           name: littlenavmap-git-x86_64
           path: |
-            *.pkg.tar.zst
-            *.pkg.tar.xz
+            littlenavmap-git-*.pkg.tar.zst
+            littlenavmap-git-*.pkg.tar.xz
+            !littlenavmap-git-debug-*
+          if-no-files-found: error
+
+      - name: Upload debug package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: littlenavmap-git-debug-x86_64
+          path: |
+            littlenavmap-git-debug-*.pkg.tar.zst
+            littlenavmap-git-debug-*.pkg.tar.xz
           if-no-files-found: error
