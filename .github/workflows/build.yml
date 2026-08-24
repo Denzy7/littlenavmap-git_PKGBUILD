@@ -110,15 +110,17 @@ jobs:
         # /var/lib/archbuild/ itself (first run only; later runs reuse and
         # just update it) -- no manual mkarchroot step needed.
         #
-        # --repo extra:  this package isn't in an official repo, so tell
-        #                 pkgctl which chroot flavor to use rather than
-        #                 relying on auto-detection (which only works for
-        #                 packages already released in a repo).
         # --arch x86_64:  build explicitly for x86_64.
         # -c/--clean:     recreate the chroot's working copy before
         #                 building, so every run starts from a pristine
         #                 state rather than whatever a previous run left
         #                 behind.
+        #
+        # Note: we deliberately do NOT pass --repo. pkgctl auto-detects
+        # the target repo itself and falls back to 'extra' for packages
+        # that aren't in an official repo (which is our case here);
+        # passing --repo explicitly conflicts with that auto-detection
+        # and pkgctl refuses to run ("disallowed" error).
         #
         # Package depends/makedepends are installed inside the chroot
         # automatically from the PKGBUILD -- nothing manual here. Because
@@ -128,7 +130,7 @@ jobs:
         run: |
           sudo -u builder bash -c "
             cd '$GITHUB_WORKSPACE' &&
-            pkgctl build --repo extra --arch x86_64 -c
+            pkgctl build --arch x86_64 -c
           "
 
       - name: Show resulting package files
