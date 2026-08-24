@@ -47,13 +47,26 @@ jobs:
         # needs to be installed on the host at all.
         run: |
           pacman -Syu --noconfirm
-          pacman -S --needed --noconfirm devtools sudo
+          pacman -S --needed --noconfirm devtools sudo dbus
 
       - name: Generate machine-id for systemd-nspawn
         # Docker images ship without /etc/machine-id by design (it's meant
         # to be generated at first real boot). systemd-nspawn requires one
         # to exist to run at all, so create it explicitly here.
         run: systemd-machine-id-setup
+
+      - name: Start D-Bus system bus
+        # systemd-nspawn tries to register each container it launches with
+        # systemd-machined over the D-Bus system bus. Plain Docker
+        # containers don't run a bus daemon at all, so that registration
+        # fails with "Failed to open system bus: No such file or
+        # directory". Starting one here provides the socket nspawn expects.
+        run: |
+          mkdir -p /run/dbus
+          dbus-daemon --system --fork
+          # Fail fast here rather than deep inside a chroot build if this
+          # didn't come up cleanly.
+          test -S /run/dbus/system_bus_socket
 
       - name: Resolve upstream commit hashes
         id: srcrefs
