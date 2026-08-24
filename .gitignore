@@ -1,0 +1,12 @@
+marble/
+src/
+pkg/
+*.log
+XPSDK*.zip
+atools-v*.zip
+littlenavconnect-v*.zip
+littlenavmap-v*.zip
+littlexpconnect-v*.zip
+littlenavmap*.pkg.tar.zst
+LittleNavmap-linux-ubuntu*.tar.xz
+

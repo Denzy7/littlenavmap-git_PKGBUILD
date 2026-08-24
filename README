@@ -1,0 +1,7 @@
+- an alternative to littlenavmap-bin which is more lightweight(-400% less disk space usage as some small performance gains. You'll notice less stutters when zooming in or out the map when there are lots of items enabled)
+- qt6 support with docking on wayland too
+- attemps to use system libraries, likewise it respects system theme
+- the xplane plugin isn't provided. you'll have to build it yourself or use the stable release plugin version
+- its bleeding edge so if you have any pkgbuild issues delete the src first
+- if you get no tag found deepening its not problem just let it do it's thing. if it fails rereun the build
+- only build issues should be reported here. use upstream to report application issues

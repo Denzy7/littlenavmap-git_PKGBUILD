@@ -1,0 +1,14 @@
+diff --git a/src/gui/timedialog.ui b/src/gui/timedialog.ui
+index c72406f..342c4af 100644
+--- a/src/gui/timedialog.ui
++++ b/src/gui/timedialog.ui
+@@ -29,9 +29,6 @@
+      <property name="displayFormat">
+       <string>HH:mm UTC</string>
+      </property>
+-     <property name="timeSpec">
+-      <enum>Qt::UTC</enum>
+-     </property>
+     </widget>
+    </item>
+    <item>

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Exec=/usr/bin/littlenavmap
+Name=Little Navmap
+GenericName=A Free Open Source Flight Planner
+Icon=/usr/lib/littlenavmap-@VERSION@/Little Navmap/littlenavmap.svg
+Terminal=false
+Categories=Application;Game;
