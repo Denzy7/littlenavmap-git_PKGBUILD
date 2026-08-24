@@ -36,13 +36,33 @@ jobs:
       - name: Resolve upstream commit hashes
         id: srcrefs
         run: |
+          set -e
+
           # Query the latest commit on each upstream repo WITHOUT cloning.
           # These four hashes together uniquely identify "the source state"
           # this build would produce, so they drive the cache key below.
-          atools_sha=$(git ls-remote https://github.com/albar965/atools.git HEAD | cut -f1)
-          marble_sha=$(git ls-remote https://github.com/albar965/marble.git refs/heads/lnm/1.2 | cut -f1)
-          littlenavconnect_sha=$(git ls-remote https://github.com/albar965/littlenavconnect.git HEAD | cut -f1)
-          littlenavmap_sha=$(git ls-remote https://github.com/albar965/littlenavmap.git HEAD | cut -f1)
+          # `head -n1` guards against ls-remote matching more than one ref
+          # (e.g. HEAD plus a same-named branch) and returning multiple lines.
+          get_sha() {
+            git ls-remote "$1" "$2" | head -n1 | cut -f1
+          }
+
+          atools_sha=$(get_sha https://github.com/albar965/atools.git HEAD)
+          marble_sha=$(get_sha https://github.com/albar965/marble.git refs/heads/lnm/1.2)
+          littlenavconnect_sha=$(get_sha https://github.com/albar965/littlenavconnect.git HEAD)
+          littlenavmap_sha=$(get_sha https://github.com/albar965/littlenavmap.git HEAD)
+
+          # Sanity check: each value must be exactly one 40-char hex SHA.
+          for pair in "atools:$atools_sha" "marble:$marble_sha" \
+                      "littlenavconnect:$littlenavconnect_sha" \
+                      "littlenavmap:$littlenavmap_sha"; do
+            name=${pair%%:*}
+            sha=${pair#*:}
+            if ! printf '%s' "$sha" | grep -qE '^[0-9a-f]{40}$'; then
+              echo "::error::Could not resolve a single commit SHA for $name (got: '$sha')"
+              exit 1
+            fi
+          done
 
           echo "atools=$atools_sha" >> "$GITHUB_OUTPUT"
           echo "marble=$marble_sha" >> "$GITHUB_OUTPUT"
