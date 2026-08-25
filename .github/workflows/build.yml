@@ -44,10 +44,10 @@ jobs:
           get_sha() {
             git ls-remote "$1" "$2" | head -n1 | cut -f1
           }
-          atools_sha=$(get_sha https://github.com/albar965/atools.git HEAD)
+          atools_sha=$(get_sha https://github.com/albar965/atools.git refs/heads/release/4.2)
           marble_sha=$(get_sha https://github.com/albar965/marble.git refs/heads/lnm/1.2)
-          littlenavconnect_sha=$(get_sha https://github.com/albar965/littlenavconnect.git HEAD)
-          littlenavmap_sha=$(get_sha https://github.com/albar965/littlenavmap.git HEAD)
+          littlenavconnect_sha=$(get_sha https://github.com/albar965/littlenavconnect.git refs/heads/release/3.2)
+          littlenavmap_sha=$(get_sha https://github.com/albar965/littlenavmap.git refs/heads/release/3.2)
           # Sanity check: each value must be exactly one 40-char hex SHA.
           for pair in "atools:$atools_sha" "marble:$marble_sha" \
                       "littlenavconnect:$littlenavconnect_sha" \
