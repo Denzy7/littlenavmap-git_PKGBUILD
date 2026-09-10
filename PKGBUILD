@@ -1,7 +1,10 @@
 # Maintainer: Dennis Maina <dennismyner7@gmail.com>
 pkgname=littlenavmap-git
-pkgver=3.0.18.r291.ge925c14
-_marblever=1.2
+pkgver=3.0.18.r331.g8c11a75f
+_atoolsver=release/4.2
+_marblever=lnm/1.2
+_navmapver=release/3.2
+_navconnectver=release/3.2
 pkgrel=1
 epoch=
 pkgdesc="A Free Open Source Flight Planner, Navigation Tool, Moving
@@ -37,7 +40,8 @@ sha256sums=('cd8009076d1f6c4300f98089eeb8acb5ea09fdb3bbafe83ccce910f0a05da51d'
             'e9fecc5a510aa645be23f12390d777d7f5ea725ca04d00320f68dfcfaec5d43a'
             'e645836ec63a04e0dd3f7337bdd7707d93836872279b8355c1657b38c6a05872'
             'd9479c8316352a8a7c38df90f3cf596cb91c038c47ed743f55cb03b63025337d'
-            '5f6f9d4220d0ecc945584e0022fb6224547e16eab9386930ab0c08a7982f011e')
+            '5f6f9d4220d0ecc945584e0022fb6224547e16eab9386930ab0c08a7982f011e'
+            )
 validpgpkeys=()
 
 pkgver() {
@@ -58,19 +62,19 @@ prepare() {
     if [[ -d "$srcdir/atools/.git" ]]; then
         git -C "$srcdir/atools" pull
     else
-        git -C "$srcdir" clone --depth 1 https://github.com/albar965/atools.git
+        git -C "$srcdir" clone --branch $_atoolsver --depth 1 https://github.com/albar965/atools.git
     fi
 
     if [[ -d "$srcdir/marble/.git" ]]; then
         git -C "$srcdir/marble" pull
     else
-        git -C "$srcdir" clone --branch lnm/$_marblever --depth 1 https://github.com/albar965/marble.git
+        git -C "$srcdir" clone --branch $_marblever --depth 1 https://github.com/albar965/marble.git
     fi
 
     if [[ -d "$srcdir/littlenavconnect/.git" ]]; then
         git -C "$srcdir/littlenavconnect" pull
     else
-        git -C "$srcdir" clone --depth 1 https://github.com/albar965/littlenavconnect.git
+        git -C "$srcdir" clone --branch $_navconnectver --depth 1 https://github.com/albar965/littlenavconnect.git
     fi
 
     if [[ -d "$srcdir/littlenavmap/.git" ]]; then
@@ -79,12 +83,38 @@ prepare() {
         git restore .
         git pull
     else
-        git -C "$srcdir" clone --depth 1 https://github.com/albar965/littlenavmap.git
+        git -C "$srcdir" clone --branch $_navmapver --depth 1 https://github.com/albar965/littlenavmap.git
         pushd "$srcdir/littlenavmap"
+
+        depth=100
+        max_depth=51200
+
         while ! git describe --tags --long >/dev/null 2>&1; do
-            echo "no tag found. deepening"
-            git fetch --deepen=100 origin
+            echo "no tag found. deepening by $depth"
+
+            n=0
+            until git -c protocol.version=0 fetch --deepen="$depth" origin; do
+                n=$((n + 1))
+                if [ "$n" -ge 3 ]; then
+                    echo "fetch --deepen=$depth failed after 3 attempts, aborting"
+                    exit 1
+                fi
+                echo "fetch failed, retrying ($n/3)..."
+                sleep 1
+            done
+
+            if [ "$(git rev-parse --is-shallow-repository)" = "false" ]; then
+                echo "repository fully unshallowed, no tag found"
+                break
+            fi
+
+            depth=$((depth * 2))
+            if [ "$depth" -gt "$max_depth" ]; then
+                echo "hit max depth ($max_depth), aborting"
+                exit 1
+            fi
         done
+
     fi
 
     echo "patching sources"
@@ -151,6 +181,8 @@ build() {
     make -j$(nproc)
     make deploy
     eval rm -fr "$_deploydir/Little\ Navconnect/lib"
+    eval rm "$_deploydir/Little\ Navconnect/qt.conf"
+    eval rm "$_deploydir/Little\ Navmap/qt.conf"
 }
 
 package() {
@@ -169,5 +201,6 @@ package() {
     cp "$srcdir/LittleNavmap.desktop" "${pkgdir}/usr/share/applications"
 
     ln -sf "/$_approot/Little Navmap/littlenavmap" "${pkgdir}/usr/bin/littlenavmap"
+    ln -sf "/$_approot/Little Navconnect/littlenavconnect" "${pkgdir}/usr/bin/littlenavconnect"
 }
 
