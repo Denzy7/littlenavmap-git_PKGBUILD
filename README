@@ -5,3 +5,4 @@
 - its bleeding edge so if you have any pkgbuild issues delete the src first
 - if you get no tag found deepening its not problem just let it do it's thing. if it fails rereun the build
 - only build issues should be reported here. use upstream to report application issues
+- you can download and install the latest CI build at https://github.com/Denzy7/littlenavmap-git_PKGBUILD/actions
