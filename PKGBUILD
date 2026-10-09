@@ -25,6 +25,7 @@ source=(
     "0002_src_gui_timedialog.ui.patch"
     "0003_src_logbook_logdatadialog.ui.patch"
     "0004_src_routeexport_routeexportdialog.ui.patch"
+    "0005-src_webapi_abstractlnmactionscontroller.h.patch"
 )
 sha256sums=('SKIP'
             'SKIP'
@@ -35,7 +36,8 @@ sha256sums=('SKIP'
             'e9fecc5a510aa645be23f12390d777d7f5ea725ca04d00320f68dfcfaec5d43a'
             'e645836ec63a04e0dd3f7337bdd7707d93836872279b8355c1657b38c6a05872'
             'd9479c8316352a8a7c38df90f3cf596cb91c038c47ed743f55cb03b63025337d'
-            '5f6f9d4220d0ecc945584e0022fb6224547e16eab9386930ab0c08a7982f011e')
+            '5f6f9d4220d0ecc945584e0022fb6224547e16eab9386930ab0c08a7982f011e'
+            '47960be40b36806639af8645151d4dddd7a39f3e5b38f720789ae994d354ecf4')
 
 pkgver() {
     cd littlenavmap
