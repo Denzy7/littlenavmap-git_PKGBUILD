@@ -111,26 +111,31 @@ jobs:
             makepkg -s --needed --noconfirm
           "
 
-      - name: Show resulting package files
+      - name: Locate package files
+        id: pkgs
         # Expect BOTH littlenavmap-git-*.pkg.tar.zst (main package)
         # and littlenavmap-git-debug-*.pkg.tar.zst (split debug symbols).
-        run: ls -lh *.pkg.tar.*
+        run: |
+          set -euo pipefail
+          ls -lh *.pkg.tar.*
+          main=$(ls littlenavmap-git-[0-9]*.pkg.tar.zst)
+          debug=$(ls littlenavmap-git-debug-*.pkg.tar.zst)
+          echo "main=$main" >> "$GITHUB_OUTPUT"
+          echo "debug=$debug" >> "$GITHUB_OUTPUT"
 
+      # archive: false uploads the .pkg.tar.zst itself instead of wrapping it
+      # in a zip, so the download is directly installable with `pacman -U`.
+      # It takes exactly one file; the artifact is named after the file.
       - name: Upload main package artifact
         uses: actions/upload-artifact@v7
         with:
-          name: littlenavmap-git-x86_64
-          path: |
-            littlenavmap-git-*.pkg.tar.zst
-            littlenavmap-git-*.pkg.tar.xz
-            !littlenavmap-git-debug-*
+          path: ${{ steps.pkgs.outputs.main }}
+          archive: false
           if-no-files-found: error
 
       - name: Upload debug package artifact
         uses: actions/upload-artifact@v7
         with:
-          name: littlenavmap-git-debug-x86_64
-          path: |
-            littlenavmap-git-debug-*.pkg.tar.zst
-            littlenavmap-git-debug-*.pkg.tar.xz
+          path: ${{ steps.pkgs.outputs.debug }}
+          archive: false
           if-no-files-found: error
