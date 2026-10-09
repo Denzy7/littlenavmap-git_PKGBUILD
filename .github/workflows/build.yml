@@ -46,70 +46,53 @@ jobs:
         # depends/makedepends are complete.
         run: |
           pacman -Syu --noconfirm
-          pacman -S --needed --noconfirm git sudo
+          pacman -S --needed --noconfirm git sudo ccache
+          # Enable makepkg's ccache support (puts /usr/lib/ccache/bin first
+          # in PATH, which qmake and cmake both pick up)
+          sed -i 's/^BUILDENV=(\(.*\)!ccache/BUILDENV=(\1ccache/' /etc/makepkg.conf
+          grep '^BUILDENV=' /etc/makepkg.conf
 
-      - name: Resolve upstream commit hashes
-        id: srcrefs
-        run: |
-          set -euo pipefail
-          # Read the git sources (name::git+url#branch=...) straight from the
-          # PKGBUILD so branch names live in exactly one place. Query their
-          # latest commits WITHOUT cloning; together they identify the source
-          # state this build would produce and drive the cache key below.
-          source ./PKGBUILD
-          combined=""
-          for s in "${source[@]}"; do
-            [[ $s == *::git+* ]] || continue
-            name=${s%%::*}
-            url=${s#*::git+}
-            branch=${url##*#branch=}
-            url=${url%%#*}
-            # `head -n1` guards against ls-remote matching more than one ref
-            sha=$(git ls-remote "$url" "refs/heads/$branch" | head -n1 | cut -f1)
-            if ! [[ $sha =~ ^[0-9a-f]{40}$ ]]; then
-              echo "::error::Could not resolve a single commit SHA for $name ($url $branch, got: '$sha')"
-              exit 1
-            fi
-            echo "$name ($branch): $sha"
-            combined+="${combined:+-}$sha"
-          done
-          echo "combined=$combined" >> "$GITHUB_OUTPUT"
-
-      - name: Restore source/build cache
+      - name: Restore source/compiler cache
         uses: actions/cache@v6
         with:
           # sources: makepkg SRCDEST (bare git mirrors, incremental fetches)
-          # src:     makepkg srcdir (working copies + fixed-name build dir,
-          #          so `make` only recompiles what changed)
+          # .ccache: compiler cache. It is keyed on file contents, so unlike
+          #          caching the build tree it survives the fresh checkout
+          #          makepkg does on every run (new mtimes everywhere).
           path: |
             sources
-            src
-          # Exact hit only when neither the packaging nor anything upstream
-          # changed. Otherwise fall back to the newest older cache, preferring
-          # one built from the same PKGBUILD/patches.
-          key: littlenavmap-v2-${{ hashFiles('PKGBUILD', '*.patch') }}-${{ steps.srcrefs.outputs.combined }}
+            .ccache
+          # Always save a new cache and restore the newest one; ccache itself
+          # decides what is reusable, GitHub evicts old entries.
+          key: littlenavmap-v3-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            littlenavmap-v2-${{ hashFiles('PKGBUILD', '*.patch') }}-
-            littlenavmap-v2-
+            littlenavmap-v3-
 
       - name: Create unprivileged build user
         run: |
           # makepkg refuses to run as root, so create a dedicated user
           useradd -m builder
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-          mkdir -p "$GITHUB_WORKSPACE/sources"
+          mkdir -p "$GITHUB_WORKSPACE/sources" "$GITHUB_WORKSPACE/.ccache"
           chown -R builder:builder "$GITHUB_WORKSPACE"
 
       - name: Build package with makepkg
         # -s: install missing deps via pacman, --needed: skip installed deps,
-        # --noconfirm: no prompts. No -c: src/ must survive for the cache.
+        # --noconfirm: no prompts.
         # The image's makepkg.conf has `debug` in OPTIONS, so this also
         # produces a split littlenavmap-git-debug-*.pkg.tar.zst.
+        env:
+          SRCDEST: ${{ github.workspace }}/sources
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+          CCACHE_MAXSIZE: 3G
+          # srcdir path is identical every run, but be safe about it
+          CCACHE_BASEDIR: ${{ github.workspace }}
         run: |
-          sudo -u builder env SRCDEST="$GITHUB_WORKSPACE/sources" bash -c "
-            cd '$GITHUB_WORKSPACE' &&
-            makepkg -s --needed --noconfirm
-          "
+          sudo -u builder --preserve-env=SRCDEST,CCACHE_DIR,CCACHE_MAXSIZE,CCACHE_BASEDIR bash -c '
+            ccache -z &&
+            makepkg -s --needed --noconfirm &&
+            ccache -s
+          '
 
       - name: Locate package files
         id: pkgs

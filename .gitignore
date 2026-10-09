@@ -11,3 +11,4 @@ littlenavmap*.pkg.tar.zst
 LittleNavmap-linux-ubuntu*.tar.xz
 
 sources/
+.ccache/
