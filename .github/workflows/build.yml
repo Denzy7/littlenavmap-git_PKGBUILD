@@ -8,102 +8,116 @@ on:
       - "LittleNavmap.desktop"
       - ".github/workflows/build.yml"
   pull_request:
+    paths:
+      - "PKGBUILD"
+      - "*.patch"
+      - "LittleNavmap.desktop"
+      - ".github/workflows/build.yml"
   workflow_dispatch:
   schedule:
-    # Optional: rebuild weekly to track the -git upstream
+    # Rebuild weekly to track the -git upstream
     - cron: "0 3 * * 0"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     name: Build on Arch Linux (x86_64)
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     container:
       image: archlinux:base-devel
-      options: --privileged
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Update system and install build tooling
+        # Package dependencies are deliberately NOT installed here:
+        # `makepkg -s` installs them, which also verifies the PKGBUILD's
+        # depends/makedepends are complete.
         run: |
           pacman -Syu --noconfirm
-          pacman -S --needed --noconfirm \
-            git cmake patchelf sudo \
-            qt6-base qt6-svg qt6-declarative qt6-imageformats qt6-5compat \
-            curl glib2
+          pacman -S --needed --noconfirm git sudo
+
       - name: Resolve upstream commit hashes
         id: srcrefs
         run: |
-          set -e
-          # Query the latest commit on each upstream repo WITHOUT cloning.
-          # These four hashes together uniquely identify "the source state"
-          # this build would produce, so they drive the cache key below.
-          # `head -n1` guards against ls-remote matching more than one ref
-          # (e.g. HEAD plus a same-named branch) and returning multiple lines.
-          get_sha() {
-            git ls-remote "$1" "$2" | head -n1 | cut -f1
-          }
-          atools_sha=$(get_sha https://github.com/albar965/atools.git refs/heads/release/4.2)
-          marble_sha=$(get_sha https://github.com/albar965/marble.git refs/heads/lnm/1.2)
-          littlenavconnect_sha=$(get_sha https://github.com/albar965/littlenavconnect.git refs/heads/release/3.2)
-          littlenavmap_sha=$(get_sha https://github.com/albar965/littlenavmap.git refs/heads/release/3.2)
-          # Sanity check: each value must be exactly one 40-char hex SHA.
-          for pair in "atools:$atools_sha" "marble:$marble_sha" \
-                      "littlenavconnect:$littlenavconnect_sha" \
-                      "littlenavmap:$littlenavmap_sha"; do
-            name=${pair%%:*}
-            sha=${pair#*:}
-            if ! printf '%s' "$sha" | grep -qE '^[0-9a-f]{40}$'; then
-              echo "::error::Could not resolve a single commit SHA for $name (got: '$sha')"
+          set -euo pipefail
+          # Read the git sources (name::git+url#branch=...) straight from the
+          # PKGBUILD so branch names live in exactly one place. Query their
+          # latest commits WITHOUT cloning; together they identify the source
+          # state this build would produce and drive the cache key below.
+          source ./PKGBUILD
+          combined=""
+          for s in "${source[@]}"; do
+            [[ $s == *::git+* ]] || continue
+            name=${s%%::*}
+            url=${s#*::git+}
+            branch=${url##*#branch=}
+            url=${url%%#*}
+            # `head -n1` guards against ls-remote matching more than one ref
+            sha=$(git ls-remote "$url" "refs/heads/$branch" | head -n1 | cut -f1)
+            if ! [[ $sha =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::Could not resolve a single commit SHA for $name ($url $branch, got: '$sha')"
               exit 1
             fi
+            echo "$name ($branch): $sha"
+            combined+="${combined:+-}$sha"
           done
-          echo "atools=$atools_sha" >> "$GITHUB_OUTPUT"
-          echo "marble=$marble_sha" >> "$GITHUB_OUTPUT"
-          echo "littlenavconnect=$littlenavconnect_sha" >> "$GITHUB_OUTPUT"
-          echo "littlenavmap=$littlenavmap_sha" >> "$GITHUB_OUTPUT"
-          echo "combined=${atools_sha}-${marble_sha}-${littlenavconnect_sha}-${littlenavmap_sha}" >> "$GITHUB_OUTPUT"
+          echo "combined=$combined" >> "$GITHUB_OUTPUT"
+
       - name: Restore source/build cache
-        id: cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
+          # sources: makepkg SRCDEST (bare git mirrors, incremental fetches)
+          # src:     makepkg srcdir (working copies + fixed-name build dir,
+          #          so `make` only recompiles what changed)
           path: |
+            sources
             src
-            pkg
-          # Exact hit only when NOTHING upstream has changed since the cache
-          # was written -> safe to reuse untouched.
-          key: littlenavmap-src-${{ steps.srcrefs.outputs.combined }}
-          # Fallback: an older cache (some repos changed). We still restore
-          # it so `git pull` inside prepare() only has to fetch the delta
-          # for the repos that moved, instead of a full re-clone, and `make`
-          # only has to recompile what actually changed.
+          # Exact hit only when neither the packaging nor anything upstream
+          # changed. Otherwise fall back to the newest older cache, preferring
+          # one built from the same PKGBUILD/patches.
+          key: littlenavmap-v2-${{ hashFiles('PKGBUILD', '*.patch') }}-${{ steps.srcrefs.outputs.combined }}
           restore-keys: |
-            littlenavmap-src-
+            littlenavmap-v2-${{ hashFiles('PKGBUILD', '*.patch') }}-
+            littlenavmap-v2-
+
       - name: Create unprivileged build user
         run: |
           # makepkg refuses to run as root, so create a dedicated user
           useradd -m builder
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+          mkdir -p "$GITHUB_WORKSPACE/sources"
           chown -R builder:builder "$GITHUB_WORKSPACE"
+
       - name: Build package with makepkg
-        # -s: install missing deps via pacman, -c: clean up after build
-        # --needed: skip already-installed deps, --noconfirm: no prompts
-        # Because the system default makepkg.conf has `debug` in OPTIONS,
-        # this also produces a split littlenavmap-git-debug-*.pkg.tar.zst
-        # alongside the main package.
+        # -s: install missing deps via pacman, --needed: skip installed deps,
+        # --noconfirm: no prompts. No -c: src/ must survive for the cache.
+        # The image's makepkg.conf has `debug` in OPTIONS, so this also
+        # produces a split littlenavmap-git-debug-*.pkg.tar.zst.
         run: |
-          sudo -u builder bash -c "
+          sudo -u builder env SRCDEST="$GITHUB_WORKSPACE/sources" bash -c "
             cd '$GITHUB_WORKSPACE' &&
             makepkg -s --needed --noconfirm
           "
+
       - name: Show resulting package files
-        # Expect to see BOTH littlenavmap-git-*.pkg.tar.zst (main package)
+        # Expect BOTH littlenavmap-git-*.pkg.tar.zst (main package)
         # and littlenavmap-git-debug-*.pkg.tar.zst (split debug symbols).
         run: ls -lh *.pkg.tar.*
 
       - name: Upload main package artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: littlenavmap-git-x86_64
           path: |
@@ -113,7 +127,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload debug package artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: littlenavmap-git-debug-x86_64
           path: |

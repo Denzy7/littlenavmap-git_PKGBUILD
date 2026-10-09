@@ -1,10 +1,10 @@
 pkgbase = littlenavmap-git
-	pkgdesc = A Free Open Source Flight Planner, Navigation Tool, Moving Map, Airport Search, and Airport Information System for Flight Simulator X, Prepar3D, Microsoft Flight Simulator 2020, and X-Plane (git version)
-	pkgver = 3.0.18.r291.ge925c14
+	pkgdesc = Flight planner, navigation tool, moving map and airport information system for FSX, P3D, MSFS and X-Plane (git version)
+	pkgver = 3.0.18.r345.g9136dddc
 	pkgrel = 1
 	url = https://albar965.github.io/littlenavmap.html
 	arch = x86_64
-	license = GPL3
+	license = GPL-3.0-or-later
 	makedepends = git
 	makedepends = cmake
 	makedepends = patchelf
@@ -15,15 +15,24 @@ pkgbase = littlenavmap-git
 	depends = qt6-5compat
 	depends = curl
 	depends = glib2
+	provides = littlenavmap
 	conflicts = littlenavmap-bin
 	conflicts = littlenavmap
+	source = atools::git+https://github.com/albar965/atools.git#branch=release/4.2
+	source = marble::git+https://github.com/albar965/marble.git#branch=lnm/1.2
+	source = littlenavconnect::git+https://github.com/albar965/littlenavconnect.git#branch=release/3.2
+	source = littlenavmap::git+https://github.com/albar965/littlenavmap.git#branch=release/3.2
 	source = LittleNavmap.desktop
 	source = 0000-src_common_maptypes.h.patch
 	source = 0001-src_search_searchbasetable.cpp.patch
 	source = 0002_src_gui_timedialog.ui.patch
 	source = 0003_src_logbook_logdatadialog.ui.patch
 	source = 0004_src_routeexport_routeexportdialog.ui.patch
-	sha256sums = cd8009076d1f6c4300f98089eeb8acb5ea09fdb3bbafe83ccce910f0a05da51d
+	sha256sums = SKIP
+	sha256sums = SKIP
+	sha256sums = SKIP
+	sha256sums = SKIP
+	sha256sums = a786cda60d4eb018130d586908b44135ec22b938af61e2e0031f82140980e5b9
 	sha256sums = 83d8bad51d53d7badf854aa94f33ce800aa8e5151070b584db9244358b75e719
 	sha256sums = e9fecc5a510aa645be23f12390d777d7f5ea725ca04d00320f68dfcfaec5d43a
 	sha256sums = e645836ec63a04e0dd3f7337bdd7707d93836872279b8355c1657b38c6a05872

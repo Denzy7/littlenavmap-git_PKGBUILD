@@ -3,6 +3,6 @@
 - attemps to use system libraries, likewise it respects system theme
 - the xplane plugin isn't provided. you'll have to build it yourself or use the stable release plugin version
 - its bleeding edge so if you have any pkgbuild issues delete the src first
-- if you get no tag found deepening its not problem just let it do it's thing. if it fails rereun the build
+- the first build clones the full upstream repos (marble is large), later builds only fetch what changed
 - only build issues should be reported here. use upstream to report application issues
 - you can download and install the latest CI build at https://github.com/Denzy7/littlenavmap-git_PKGBUILD/actions
