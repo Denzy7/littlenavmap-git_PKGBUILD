@@ -1,6 +1,6 @@
 # Maintainer: Dennis Maina <dennismyner7@gmail.com>
 pkgname=littlenavmap-git
-pkgver=3.0.18.r345.g9136dddc
+pkgver=3.2.2.beta.r7.g518988ce
 _atoolsver=release/4.2
 _marblever=lnm/1.2
 _navmapver=release/3.2
@@ -20,7 +20,6 @@ source=(
     "littlenavconnect::git+https://github.com/albar965/littlenavconnect.git#branch=$_navconnectver"
     "littlenavmap::git+https://github.com/albar965/littlenavmap.git#branch=$_navmapver"
     "LittleNavmap.desktop"
-    "0000-src_common_maptypes.h.patch"
     "0001-src_search_searchbasetable.cpp.patch"
     "0002_src_gui_timedialog.ui.patch"
     "0003_src_logbook_logdatadialog.ui.patch"
@@ -32,7 +31,6 @@ sha256sums=('SKIP'
             'SKIP'
             'SKIP'
             'a786cda60d4eb018130d586908b44135ec22b938af61e2e0031f82140980e5b9'
-            '83d8bad51d53d7badf854aa94f33ce800aa8e5151070b584db9244358b75e719'
             'e9fecc5a510aa645be23f12390d777d7f5ea725ca04d00320f68dfcfaec5d43a'
             'e645836ec63a04e0dd3f7337bdd7707d93836872279b8355c1657b38c6a05872'
             'd9479c8316352a8a7c38df90f3cf596cb91c038c47ed743f55cb03b63025337d'
