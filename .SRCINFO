@@ -8,6 +8,7 @@ pkgbase = littlenavmap-git
 	makedepends = git
 	makedepends = cmake
 	makedepends = patchelf
+	makedepends = littlenavmap-qt6-base-static
 	depends = qt6-base
 	depends = qt6-svg
 	depends = qt6-declarative
@@ -22,6 +23,8 @@ pkgbase = littlenavmap-git
 	source = marble::git+https://github.com/albar965/marble.git#branch=lnm/1.2
 	source = littlenavconnect::git+https://github.com/albar965/littlenavconnect.git#branch=release/3.2
 	source = littlenavmap::git+https://github.com/albar965/littlenavmap.git#branch=release/3.2
+	source = littlexpconnect::git+https://github.com/albar965/littlexpconnect.git#branch=release/1.4
+	source = https://developer.x-plane.com/wp-content/plugins/code-sample-generation/sdk_zip_files/XPSDK430.zip
 	source = LittleNavmap.desktop
 	source = 0001-src_search_searchbasetable.cpp.patch
 	source = 0002_src_gui_timedialog.ui.patch
@@ -32,6 +35,8 @@ pkgbase = littlenavmap-git
 	sha256sums = SKIP
 	sha256sums = SKIP
 	sha256sums = SKIP
+	sha256sums = SKIP
+	sha256sums = b9875ab27b593927b4f9b3e0ddfffe7401ee5dce6d86b50aea0da65f70ff7816
 	sha256sums = a786cda60d4eb018130d586908b44135ec22b938af61e2e0031f82140980e5b9
 	sha256sums = e9fecc5a510aa645be23f12390d777d7f5ea725ca04d00320f68dfcfaec5d43a
 	sha256sums = e645836ec63a04e0dd3f7337bdd7707d93836872279b8355c1657b38c6a05872

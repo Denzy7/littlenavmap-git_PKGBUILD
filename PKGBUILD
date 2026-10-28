@@ -5,13 +5,15 @@ _atoolsver=release/4.2
 _marblever=lnm/1.2
 _navmapver=release/3.2
 _navconnectver=release/3.2
+_xpconnectver=release/1.4
+_xpsdkver=430
 pkgrel=1
 pkgdesc="Flight planner, navigation tool, moving map and airport information system for FSX, P3D, MSFS and X-Plane (git version)"
 arch=(x86_64)
 url="https://albar965.github.io/littlenavmap.html"
 license=("GPL-3.0-or-later")
 depends=(qt6-base qt6-svg qt6-declarative qt6-imageformats qt6-5compat curl glib2)
-makedepends=(git cmake patchelf)
+makedepends=(git cmake patchelf littlenavmap-qt6-base-static)
 provides=(littlenavmap)
 conflicts=(littlenavmap-bin littlenavmap)
 source=(
@@ -19,6 +21,8 @@ source=(
     "marble::git+https://github.com/albar965/marble.git#branch=$_marblever"
     "littlenavconnect::git+https://github.com/albar965/littlenavconnect.git#branch=$_navconnectver"
     "littlenavmap::git+https://github.com/albar965/littlenavmap.git#branch=$_navmapver"
+    "littlexpconnect::git+https://github.com/albar965/littlexpconnect.git#branch=$_xpconnectver"
+    "https://developer.x-plane.com/wp-content/plugins/code-sample-generation/sdk_zip_files/XPSDK$_xpsdkver.zip"
     "LittleNavmap.desktop"
     "0001-src_search_searchbasetable.cpp.patch"
     "0002_src_gui_timedialog.ui.patch"
@@ -30,6 +34,8 @@ sha256sums=('SKIP'
             'SKIP'
             'SKIP'
             'SKIP'
+            'SKIP'
+            'b9875ab27b593927b4f9b3e0ddfffe7401ee5dce6d86b50aea0da65f70ff7816'
             'a786cda60d4eb018130d586908b44135ec22b938af61e2e0031f82140980e5b9'
             'e9fecc5a510aa645be23f12390d777d7f5ea725ca04d00320f68dfcfaec5d43a'
             'e645836ec63a04e0dd3f7337bdd7707d93836872279b8355c1657b38c6a05872'
@@ -122,6 +128,34 @@ build() {
     make deploy
     rm -rf "$_deploydir/Little Navconnect/lib"
     rm -f "$_deploydir/Little Navconnect/qt.conf" "$_deploydir/Little Navmap/qt.conf"
+
+    # littlexpconnect (X-Plane plugin). Like upstream's build_release.sh it is
+    # built against a static Qt and a stripped down atools, so lin.xpl carries
+    # its own hidden QtCore and only needs glibc
+    local _qmake_static=/opt/littlenavmap-qt6-base-static/bin/qmake
+    local _atools_static_builddir="$_builddir/atools-static"
+    local _littlexpconnect_srcdir="$srcdir/littlexpconnect"
+    local _littlexpconnect_builddir="$_builddir/littlexpconnect"
+    local _atools_static_env=(
+        ATOOLS_NO_FS=true ATOOLS_NO_GRIB=true ATOOLS_NO_GUI=true
+        ATOOLS_NO_ROUTING=true ATOOLS_NO_SQL=true ATOOLS_NO_TRACK=true
+        ATOOLS_NO_USERDATA=true ATOOLS_NO_WEATHER=true ATOOLS_NO_WEB=true
+        ATOOLS_NO_WMM=true ATOOLS_NO_NAVSERVER=true ATOOLS_NO_CRASHHANDLER=true
+        ATOOLS_NO_QT5COMPAT=true
+    )
+
+    # atools (static Qt)
+    mkdir -p "$_atools_static_builddir"
+    cd "$_atools_static_builddir"
+    env "${_atools_static_env[@]}" "$_qmake_static" "$_atools_srcdir/atools.pro" "${_qmake_flags[@]}"
+    make -j$(nproc)
+
+    # littlexpconnect
+    mkdir -p "$_littlexpconnect_builddir"
+    cd "$_littlexpconnect_builddir"
+    env "${_atools_static_env[@]}" ATOOLS_INC_PATH="$_atools_srcdir/src" ATOOLS_LIB_PATH="$_atools_static_builddir" XPSDK_BASE="$srcdir/SDK" DEPLOY_BASE="$_deploydir" "$_qmake_static" "$_littlexpconnect_srcdir/littlexpconnect.pro" "${_qmake_flags[@]}"
+    make -j$(nproc)
+    make deploy
 }
 
 package() {

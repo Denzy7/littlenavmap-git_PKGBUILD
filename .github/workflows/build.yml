@@ -52,6 +52,17 @@ jobs:
           sed -i 's/^BUILDENV=(\(.*\)!ccache/BUILDENV=(\1ccache/' /etc/makepkg.conf
           grep '^BUILDENV=' /etc/makepkg.conf
 
+      - name: Install prebuilt static Qt
+        # littlenavmap-qt6-base-static is only needed to build the X-Plane
+        # plugin and takes a while to build, so install the package its CI
+        # publishes as a release. makepkg -s then sees the dependency as met.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pacman -S --needed --noconfirm github-cli
+          gh release download -R Denzy7/littlenavmap-qt6-base-static_PKGBUILD -p '*.pkg.tar.zst' -D /tmp/qt6static
+          pacman -U --noconfirm /tmp/qt6static/*.pkg.tar.zst
+
       - name: Restore source/compiler cache
         uses: actions/cache@v6
         with:
@@ -105,6 +116,24 @@ jobs:
           debug=$(ls littlenavmap-git-debug-*.pkg.tar.zst)
           echo "main=$main" >> "$GITHUB_OUTPUT"
           echo "debug=$debug" >> "$GITHUB_OUTPUT"
+
+      - name: Check X-Plane plugin only needs glibc
+        # lin.xpl is loaded into X-Plane next to other plugins, so like
+        # upstream's builds it must carry its own Qt and libstdc++
+        env:
+          PKG: ${{ steps.pkgs.outputs.main }}
+        run: |
+          set -euo pipefail
+          tmp=$(mktemp -d)
+          bsdtar -xf "$PKG" -C "$tmp" "usr/lib/littlenavmap/Little Xpconnect"
+          xpl="$tmp/usr/lib/littlenavmap/Little Xpconnect/64/lin.xpl"
+          readelf -d "$xpl" | grep NEEDED
+          extra=$(readelf -d "$xpl" | sed -n 's/.*NEEDED.*\[\(.*\)\]/\1/p' |
+            grep -vxE 'libc\.so\.6|libm\.so\.6|libgcc_s\.so\.1|ld-linux-x86-64\.so\.2' || true)
+          if [[ -n $extra ]]; then
+            echo "::error::lin.xpl needs unexpected libraries: $(echo $extra)"
+            exit 1
+          fi
 
       # archive: false uploads the .pkg.tar.zst itself instead of wrapping it
       # in a zip, so the download is directly installable with `pacman -U`.

@@ -1,7 +1,8 @@
 - an alternative to littlenavmap-bin which is more lightweight(-400% less disk space usage as some small performance gains. You'll notice less stutters when zooming in or out the map when there are lots of items enabled)
 - qt6 support with docking on wayland too
 - attemps to use system libraries, likewise it respects system theme
-- the xplane plugin isn't provided. you'll have to build it yourself or use the stable release plugin version
+- the xplane plugin (little xpconnect) is built too, against a static qt from littlenavmap-qt6-base-static so it only needs glibc. it's installed to /usr/lib/littlenavmap/Little Xpconnect, symlink or copy that folder into X-Plane/Resources/plugins
+- littlenavmap-qt6-base-static is only a build dependency. building it takes a while, you can install the prebuilt package from https://github.com/Denzy7/littlenavmap-qt6-base-static_PKGBUILD/releases with `sudo pacman -U <file>` instead
 - its bleeding edge so if you have any pkgbuild issues delete the src first
 - the first build clones the full upstream repos (marble is large), later builds only fetch what changed
 - only build issues should be reported here. use upstream to report application issues
