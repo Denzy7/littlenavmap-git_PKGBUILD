@@ -30,6 +30,9 @@ jobs:
     name: Build on Arch Linux (x86_64)
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    permissions:
+      # publish the packages as release assets
+      contents: write
     container:
       image: archlinux:base-devel
     defaults:
@@ -114,8 +117,11 @@ jobs:
           ls -lh *.pkg.tar.*
           main=$(ls littlenavmap-git-[0-9]*.pkg.tar.zst)
           debug=$(ls littlenavmap-git-debug-*.pkg.tar.zst)
+          ver=${main#littlenavmap-git-}
+          ver=${ver%-x86_64.pkg.tar.zst}
           echo "main=$main" >> "$GITHUB_OUTPUT"
           echo "debug=$debug" >> "$GITHUB_OUTPUT"
+          echo "tag=v$ver" >> "$GITHUB_OUTPUT"
 
       - name: Check X-Plane plugin only needs glibc
         # lin.xpl is loaded into X-Plane next to other plugins, so like
@@ -151,3 +157,43 @@ jobs:
           path: ${{ steps.pkgs.outputs.debug }}
           archive: false
           if-no-files-found: error
+
+      - name: Publish packages as release
+        # Artifacts expire and need a GitHub login to download; a release is
+        # permanent and public. Pushes, the weekly rebuild and manual runs on
+        # the default branch publish, pull requests never do.
+        if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PKG: ${{ steps.pkgs.outputs.main }}
+          DEBUG_PKG: ${{ steps.pkgs.outputs.debug }}
+          TAG: ${{ steps.pkgs.outputs.tag }}
+        run: |
+          set -euo pipefail
+          notes="Prebuilt littlenavmap-git. Install with \`sudo pacman -U $PKG\`.
+
+          sha256: \`$(sha256sum "$PKG" | cut -d' ' -f1)\`"
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # same upstream commit and pkgrel rebuilt (weekly run with no
+            # upstream changes, CI change): replace the assets
+            gh release upload "$TAG" "$PKG" "$DEBUG_PKG" --clobber -R "$GITHUB_REPOSITORY"
+            gh release edit "$TAG" --notes "$notes" -R "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" "$PKG" "$DEBUG_PKG" --latest --title "$TAG" \
+              --notes "$notes" --target "$GITHUB_SHA" -R "$GITHUB_REPOSITORY"
+          fi
+
+      - name: Keep only the last 3 releases
+        if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.pkgs.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release list -R "$GITHUB_REPOSITORY" --limit 100 --json tagName,createdAt \
+            -q 'sort_by(.createdAt) | reverse | .[3:] | .[].tagName' |
+            while read -r old; do
+              [[ $old == "$TAG" ]] && continue
+              echo "deleting $old"
+              gh release delete "$old" --cleanup-tag --yes -R "$GITHUB_REPOSITORY"
+            done

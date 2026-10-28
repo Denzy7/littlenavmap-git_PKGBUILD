@@ -6,4 +6,4 @@
 - its bleeding edge so if you have any pkgbuild issues delete the src first
 - the first build clones the full upstream repos (marble is large), later builds only fetch what changed
 - only build issues should be reported here. use upstream to report application issues
-- you can download the latest CI build at https://github.com/Denzy7/littlenavmap-git_PKGBUILD/actions (the artifacts are the .pkg.tar.zst files themselves, install with `sudo pacman -U <file>`)
+- prebuilt packages: https://github.com/Denzy7/littlenavmap-git_PKGBUILD/releases (CI publishes one on every push and weekly), install with `sudo pacman -U <file>`
