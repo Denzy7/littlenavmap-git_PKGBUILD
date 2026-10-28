@@ -1,7 +1,7 @@
 pkgbase = littlenavmap-git
 	pkgdesc = Flight planner, navigation tool, moving map and airport information system for FSX, P3D, MSFS and X-Plane (git version)
 	pkgver = 3.2.2.beta.r7.g518988ce
-	pkgrel = 1
+	pkgrel = 2
 	url = https://albar965.github.io/littlenavmap.html
 	arch = x86_64
 	license = GPL-3.0-or-later

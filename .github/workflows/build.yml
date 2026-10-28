@@ -125,8 +125,8 @@ jobs:
         run: |
           set -euo pipefail
           tmp=$(mktemp -d)
-          bsdtar -xf "$PKG" -C "$tmp" "usr/lib/littlenavmap/Little Xpconnect"
-          xpl="$tmp/usr/lib/littlenavmap/Little Xpconnect/64/lin.xpl"
+          bsdtar -xf "$PKG" -C "$tmp" "usr/lib/littlenavmap/Little Navmap/Little Xpconnect"
+          xpl="$tmp/usr/lib/littlenavmap/Little Navmap/Little Xpconnect/64/lin.xpl"
           readelf -d "$xpl" | grep NEEDED
           extra=$(readelf -d "$xpl" | sed -n 's/.*NEEDED.*\[\(.*\)\]/\1/p' |
             grep -vxE 'libc\.so\.6|libm\.so\.6|libgcc_s\.so\.1|ld-linux-x86-64\.so\.2' || true)

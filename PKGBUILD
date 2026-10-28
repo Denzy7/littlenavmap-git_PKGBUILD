@@ -7,7 +7,7 @@ _navmapver=release/3.2
 _navconnectver=release/3.2
 _xpconnectver=release/1.4
 _xpsdkver=430
-pkgrel=1
+pkgrel=2
 pkgdesc="Flight planner, navigation tool, moving map and airport information system for FSX, P3D, MSFS and X-Plane (git version)"
 arch=(x86_64)
 url="https://albar965.github.io/littlenavmap.html"
@@ -42,6 +42,17 @@ sha256sums=('SKIP'
             'd9479c8316352a8a7c38df90f3cf596cb91c038c47ed743f55cb03b63025337d'
             '5f6f9d4220d0ecc945584e0022fb6224547e16eab9386930ab0c08a7982f011e'
             '47960be40b36806639af8645151d4dddd7a39f3e5b38f720789ae994d354ecf4')
+
+# makepkg runs gdb-add-index on every binary for the debug package. gdb 18.1
+# cleans up with an unquoted `rm -f $tmp_files`, so with spaces in the path
+# ("Little Navmap") its temporary index files end up in the package. makepkg
+# calls this function instead of the binary; drop it once gdb is fixed
+gdb-add-index() {
+    local _ret=0
+    command gdb-add-index "$@" || _ret=$?
+    rm -f -- "${@: -1}".{gdb-index,debug_names,debug_str,debug_str.merge,debug_str.err}
+    return $_ret
+}
 
 pkgver() {
     cd littlenavmap
@@ -156,6 +167,9 @@ build() {
     env "${_atools_static_env[@]}" ATOOLS_INC_PATH="$_atools_srcdir/src" ATOOLS_LIB_PATH="$_atools_static_builddir" XPSDK_BASE="$srcdir/SDK" DEPLOY_BASE="$_deploydir" "$_qmake_static" "$_littlexpconnect_srcdir/littlexpconnect.pro" "${_qmake_flags[@]}"
     make -j$(nproc)
     make deploy
+    # like upstream's pack_deploy.sh, ship it inside the Little Navmap folder:
+    # Tools > Install Little Xpconnect is only enabled when it's found there
+    mv "$_deploydir/Little Xpconnect" "$_deploydir/Little Navmap/"
 }
 
 package() {
@@ -168,6 +182,12 @@ package() {
     install -Dm644 "$srcdir/LittleNavmap.desktop" "$pkgdir/usr/share/applications/littlenavmap.desktop"
     install -Dm644 "$_deploydir/Little Navmap/littlenavmap.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/littlenavmap.svg"
 
-    ln -sf "/$_approot/Little Navmap/littlenavmap" "$pkgdir/usr/bin/littlenavmap"
-    ln -sf "/$_approot/Little Navconnect/littlenavconnect" "$pkgdir/usr/bin/littlenavconnect"
+    # wrappers instead of symlinks: started through PATH, Qt resolves argv[0]
+    # to /usr/bin without following the symlink, so applicationDirPath()
+    # (map themes, data, help, Little Xpconnect) pointed to /usr/bin
+    local _bin
+    for _bin in "Little Navmap/littlenavmap" "Little Navconnect/littlenavconnect"; do
+        printf '#!/bin/sh\nexec "%s" "$@"\n' "/$_approot/$_bin" > "$pkgdir/usr/bin/${_bin##*/}"
+        chmod 755 "$pkgdir/usr/bin/${_bin##*/}"
+    done
 }
